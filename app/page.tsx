@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Mic, Square } from "lucide-react";
 
 type SpeechRecognitionEvent = Event & {
@@ -31,7 +31,6 @@ type SpeechRecognition = {
   lang: string;
   start: () => void;
   stop: () => void;
-  abort: () => void;
   onstart: (() => void) | null;
   onend: (() => void) | null;
   onerror: ((event: Event) => void) | null;
@@ -53,68 +52,26 @@ export default function Home() {
   const [history, setHistory] = useState<string[]>([]);
   const [interim, setInterim] = useState(false);
   const [error, setError] = useState("");
-  const [supported, setSupported] = useState(true);
-  const [isStarting, setIsStarting] = useState(false);
+  const [supported, setSupported] = useState<boolean | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const stopRecognition = useCallback(() => {
-    try {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    } catch {
-      // Ignore stop errors
-    }
-    setIsListening(false);
-    setInterim(false);
-  }, []);
-
-  const startRecognition = useCallback(() => {
-    setError("");
-    setIsStarting(true);
-    setWord("");
-    setInterim(true);
-
-    try {
-      if (recognitionRef.current) {
-        recognitionRef.current.start();
-        setIsListening(true);
-      }
-    } catch (err) {
-      setError("Failed to start");
-      setIsListening(false);
-      setInterim(false);
-    }
-    setIsStarting(false);
-  }, []);
-
-  const toggleListening = useCallback(() => {
-    if (isListening) {
-      stopRecognition();
-    } else {
-      startRecognition();
-    }
-  }, [isListening, startRecognition, stopRecognition]);
-
+  // Initialize speech recognition
   useEffect(() => {
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+    const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognitionClass) {
       setSupported(false);
-      setError("Speech recognition not supported");
       return;
     }
 
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.continuous = true;
-    recognitionRef.current.interimResults = true;
-    recognitionRef.current.lang = "en-US";
+    setSupported(true);
+    const recognition = new SpeechRecognitionClass();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
 
-    recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-      const results = event.results;
-      const lastResult = results[results.length - 1];
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const lastResult = event.results[event.results.length - 1];
       
       if (lastResult.isFinal) {
         const text = lastResult[0].transcript.trim();
@@ -128,51 +85,65 @@ export default function Home() {
         const interimText = lastResult[0].transcript.trim();
         if (interimText) {
           setInterim(true);
-          if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
-          }
-          timeoutRef.current = setTimeout(() => {
-            setInterim(false);
-          }, 2000);
         }
       }
     };
 
-    recognitionRef.current.onerror = () => {
+    recognition.onerror = () => {
       setError("Error occurred");
       setIsListening(false);
       setInterim(false);
     };
 
-    recognitionRef.current.onend = () => {
+    recognition.onend = () => {
       setInterim(false);
-      if (restartTimeoutRef.current) {
-        clearTimeout(restartTimeoutRef.current);
-      }
       if (isListening) {
-        restartTimeoutRef.current = setTimeout(() => {
-          try {
-            recognitionRef.current?.start();
-          } catch {
-            // Ignore restart errors
-          }
-        }, 100);
+        try {
+          recognition.start();
+        } catch {
+          // Ignore restart errors
+        }
       }
     };
 
-    return () => {
-      if (restartTimeoutRef.current) {
-        clearTimeout(restartTimeoutRef.current);
-      }
-      try {
-        recognitionRef.current?.abort();
-      } catch {
-        // Ignore abort errors
-      }
-    };
+    recognitionRef.current = recognition;
   }, [isListening]);
 
-  if (!supported) {
+  const toggleListening = () => {
+    if (!recognitionRef.current) return;
+
+    if (isListening) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // Ignore
+      }
+      setIsListening(false);
+      setInterim(false);
+    } else {
+      setError("");
+      setWord("");
+      setInterim(true);
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch {
+        setError("Failed to start");
+        setIsListening(false);
+        setInterim(false);
+      }
+    }
+  };
+
+  if (supported === null) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <p className="text-white">Loading...</p>
+      </div>
+    );
+  }
+
+  if (supported === false) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4">
         <div className="text-center text-white">
@@ -213,12 +184,11 @@ export default function Home() {
         {/* Button */}
         <button
           onClick={toggleListening}
-          disabled={isStarting}
           className={`flex items-center gap-3 px-10 py-5 rounded-2xl font-semibold text-xl transition-all ${
             isListening
               ? "bg-red-600 text-white"
               : "bg-white text-black"
-          } ${isStarting ? "opacity-50 cursor-not-allowed" : ""}`}
+          }`}
         >
           {isListening ? (
             <>
