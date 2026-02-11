@@ -68,23 +68,16 @@ export default function Home() {
     recognitionRef.current.lang = "en-US";
 
     recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-      let finalTranscript = "";
-      let interimTranscript = "";
-
-      for (let i = event.results.length - 1; i >= 0; i--) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript = result[0].transcript + finalTranscript;
-        } else {
-          interimTranscript = result[0].transcript + interimTranscript;
+      // Get the last result (most recent word)
+      const lastResult = event.results[event.results.length - 1];
+      if (lastResult && lastResult.isFinal) {
+        const text = lastResult[0].transcript.trim();
+        if (text) {
+          // Title case: first char uppercase, rest lowercase
+          const titleCase = text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+          setWord(titleCase);
+          setSpelling(titleCase.split("").join("  "));
         }
-      }
-
-      const text = finalTranscript || interimTranscript;
-      if (text.trim()) {
-        const cleaned = text.trim().toUpperCase();
-        setWord(cleaned);
-        setSpelling(cleaned.split("").join("  "));
       }
     };
 
