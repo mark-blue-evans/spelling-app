@@ -49,9 +49,11 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [word, setWord] = useState("");
   const [spelling, setSpelling] = useState("");
+  const [interim, setInterim] = useState(false);
   const [error, setError] = useState("");
   const [supported, setSupported] = useState(true);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const SpeechRecognition =
@@ -68,15 +70,27 @@ export default function Home() {
     recognitionRef.current.lang = "en-US";
 
     recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-      // Get the last result (most recent word)
-      const lastResult = event.results[event.results.length - 1];
-      if (lastResult && lastResult.isFinal) {
+      const results = event.results;
+      const lastResult = results[results.length - 1];
+      
+      if (lastResult.isFinal) {
         const text = lastResult[0].transcript.trim();
         if (text) {
-          // Title case: first char uppercase, rest lowercase
           const titleCase = text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
           setWord(titleCase);
           setSpelling(titleCase.split("").join("  "));
+        }
+        setInterim(false);
+      } else {
+        const interimText = lastResult[0].transcript.trim();
+        if (interimText) {
+          setInterim(true);
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+          }
+          timeoutRef.current = setTimeout(() => {
+            setInterim(false);
+          }, 2000);
         }
       }
     };
@@ -84,9 +98,11 @@ export default function Home() {
     recognitionRef.current.onerror = () => {
       setError("Error occurred");
       setIsListening(false);
+      setInterim(false);
     };
 
     recognitionRef.current.onend = () => {
+      setInterim(false);
       if (isListening) {
         try {
           recognitionRef.current?.start();
@@ -101,8 +117,12 @@ export default function Home() {
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
+      setInterim(false);
     } else {
       setError("");
+      setWord("");
+      setSpelling("");
+      setInterim(false);
       try {
         recognitionRef.current?.start();
         setIsListening(true);
@@ -116,6 +136,7 @@ export default function Home() {
     setWord("");
     setSpelling("");
     setError("");
+    setInterim(false);
   };
 
   if (!supported) {
@@ -139,6 +160,17 @@ export default function Home() {
             {word || "—"}
           </p>
         </div>
+
+        {/* Spinner */}
+        {interim && (
+          <div className="flex justify-center mb-6">
+            <div className="flex gap-1">
+              <span className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+          </div>
+        )}
 
         {/* Spelling Display */}
         <div className="bg-gray-900 rounded-2xl p-6 md:p-8 mb-6 text-center min-h-[120px] flex items-center justify-center">
