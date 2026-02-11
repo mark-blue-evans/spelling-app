@@ -45,13 +45,15 @@ declare global {
   }
 }
 
+const MAX_HISTORY = 5;
+
 export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [word, setWord] = useState("");
+  const [history, setHistory] = useState<string[]>([]);
   const [interim, setInterim] = useState(false);
   const [error, setError] = useState("");
   const [supported, setSupported] = useState(true);
-  const [started, setStarted] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -78,6 +80,7 @@ export default function Home() {
         if (text) {
           const titleCase = text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
           setWord(titleCase);
+          setHistory(prev => [titleCase, ...prev].slice(0, MAX_HISTORY));
         }
         setInterim(false);
       } else {
@@ -97,7 +100,6 @@ export default function Home() {
     recognitionRef.current.onerror = () => {
       setError("Error occurred");
       setIsListening(false);
-      setStarted(false);
       setInterim(false);
     };
 
@@ -121,7 +123,6 @@ export default function Home() {
         // Ignore stop errors
       }
       setIsListening(false);
-      setStarted(false);
       setInterim(false);
     } else {
       setError("");
@@ -130,11 +131,9 @@ export default function Home() {
       try {
         recognitionRef.current?.start();
         setIsListening(true);
-        setStarted(true);
       } catch {
         setError("Failed to start");
         setIsListening(false);
-        setStarted(false);
         setInterim(false);
       }
     }
@@ -153,8 +152,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
-      <div className="flex flex-col items-center gap-8">
-        {/* Word Display */}
+      <div className="flex flex-col items-center gap-6">
+        {/* Current Word */}
         <div className="text-center">
           <p className="text-gray-500 text-sm mb-2">WORD</p>
           <p className="text-white text-5xl md:text-7xl font-bold tracking-wider">
@@ -204,6 +203,21 @@ export default function Home() {
         <p className="text-gray-600 text-sm">
           {isListening ? "Listening..." : "Ready"}
         </p>
+
+        {/* History */}
+        {history.length > 0 && (
+          <div className="flex flex-col items-center gap-2 mt-4">
+            {history.map((item, index) => (
+              <p
+                key={index}
+                className="text-gray-500 font-medium tracking-wide"
+                style={{ fontSize: `${1.5 - index * 0.2}rem` }}
+              >
+                {item}
+              </p>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
