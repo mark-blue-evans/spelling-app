@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Mic, Square } from "lucide-react";
 
 type SpeechRecognitionEvent = Event & {
@@ -54,8 +54,49 @@ export default function Home() {
   const [interim, setInterim] = useState(false);
   const [error, setError] = useState("");
   const [supported, setSupported] = useState(true);
+  const [isStarting, setIsStarting] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const stopRecognition = useCallback(() => {
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    } catch {
+      // Ignore stop errors
+    }
+    setIsListening(false);
+    setInterim(false);
+  }, []);
+
+  const startRecognition = useCallback(() => {
+    setError("");
+    setIsStarting(true);
+    setWord("");
+    setInterim(true);
+
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.start();
+        setIsListening(true);
+      }
+    } catch (err) {
+      setError("Failed to start");
+      setIsListening(false);
+      setInterim(false);
+    }
+    setIsStarting(false);
+  }, []);
+
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      stopRecognition();
+    } else {
+      startRecognition();
+    }
+  }, [isListening, startRecognition, stopRecognition]);
 
   useEffect(() => {
     const SpeechRecognition =
@@ -105,39 +146,31 @@ export default function Home() {
 
     recognitionRef.current.onend = () => {
       setInterim(false);
+      if (restartTimeoutRef.current) {
+        clearTimeout(restartTimeoutRef.current);
+      }
       if (isListening) {
-        try {
-          recognitionRef.current?.start();
-        } catch {
-          // Ignore restart errors
-        }
+        restartTimeoutRef.current = setTimeout(() => {
+          try {
+            recognitionRef.current?.start();
+          } catch {
+            // Ignore restart errors
+          }
+        }, 100);
+      }
+    };
+
+    return () => {
+      if (restartTimeoutRef.current) {
+        clearTimeout(restartTimeoutRef.current);
+      }
+      try {
+        recognitionRef.current?.abort();
+      } catch {
+        // Ignore abort errors
       }
     };
   }, [isListening]);
-
-  const toggleListening = () => {
-    if (isListening) {
-      try {
-        recognitionRef.current?.stop();
-      } catch {
-        // Ignore stop errors
-      }
-      setIsListening(false);
-      setInterim(false);
-    } else {
-      setError("");
-      setWord("");
-      setInterim(true);
-      try {
-        recognitionRef.current?.start();
-        setIsListening(true);
-      } catch {
-        setError("Failed to start");
-        setIsListening(false);
-        setInterim(false);
-      }
-    }
-  };
 
   if (!supported) {
     return (
@@ -180,11 +213,12 @@ export default function Home() {
         {/* Button */}
         <button
           onClick={toggleListening}
+          disabled={isStarting}
           className={`flex items-center gap-3 px-10 py-5 rounded-2xl font-semibold text-xl transition-all ${
             isListening
               ? "bg-red-600 text-white"
               : "bg-white text-black"
-          }`}
+          } ${isStarting ? "opacity-50 cursor-not-allowed" : ""}`}
         >
           {isListening ? (
             <>
