@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Mic, Square, RefreshCw } from "lucide-react";
+import { Mic, Square } from "lucide-react";
 
 type SpeechRecognitionEvent = Event & {
   results: SpeechRecognitionResultList;
@@ -48,10 +48,10 @@ declare global {
 export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [word, setWord] = useState("");
-  const [spelling, setSpelling] = useState("");
   const [interim, setInterim] = useState(false);
   const [error, setError] = useState("");
   const [supported, setSupported] = useState(true);
+  const [started, setStarted] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -78,7 +78,6 @@ export default function Home() {
         if (text) {
           const titleCase = text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
           setWord(titleCase);
-          setSpelling(titleCase.split("").join("  "));
         }
         setInterim(false);
       } else {
@@ -98,6 +97,7 @@ export default function Home() {
     recognitionRef.current.onerror = () => {
       setError("Error occurred");
       setIsListening(false);
+      setStarted(false);
       setInterim(false);
     };
 
@@ -107,7 +107,7 @@ export default function Home() {
         try {
           recognitionRef.current?.start();
         } catch {
-          // Ignore
+          // Ignore restart errors
         }
       }
     };
@@ -115,28 +115,29 @@ export default function Home() {
 
   const toggleListening = () => {
     if (isListening) {
-      recognitionRef.current?.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // Ignore stop errors
+      }
       setIsListening(false);
+      setStarted(false);
       setInterim(false);
     } else {
       setError("");
       setWord("");
-      setSpelling("");
-      setInterim(false);
+      setInterim(true);
       try {
         recognitionRef.current?.start();
         setIsListening(true);
+        setStarted(true);
       } catch {
         setError("Failed to start");
+        setIsListening(false);
+        setStarted(false);
+        setInterim(false);
       }
     }
-  };
-
-  const clear = () => {
-    setWord("");
-    setSpelling("");
-    setError("");
-    setInterim(false);
   };
 
   if (!supported) {
@@ -151,10 +152,10 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-black p-4 md:p-8">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
+      <div className="flex flex-col items-center gap-8">
         {/* Word Display */}
-        <div className="text-center mb-8">
+        <div className="text-center">
           <p className="text-gray-500 text-sm mb-2">WORD</p>
           <p className="text-white text-5xl md:text-7xl font-bold tracking-wider">
             {word || "—"}
@@ -163,66 +164,46 @@ export default function Home() {
 
         {/* Spinner */}
         {interim && (
-          <div className="flex justify-center mb-6">
-            <div className="flex gap-1">
-              <span className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-            </div>
+          <div className="flex gap-1">
+            <span className="w-4 h-4 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="w-4 h-4 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="w-4 h-4 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
           </div>
         )}
 
-        {/* Spelling Display */}
-        <div className="bg-gray-900 rounded-2xl p-6 md:p-8 mb-6 text-center min-h-[120px] flex items-center justify-center">
-          <p className="text-blue-400 text-3xl md:text-5xl font-mono tracking-[0.3em]">
-            {spelling || "..."}
-          </p>
-        </div>
-
         {/* Error */}
         {error && (
-          <div className="bg-red-900/30 border border-red-800 rounded-xl p-4 mb-6 text-center">
+          <div className="bg-red-900/30 border border-red-800 rounded-xl p-4 text-center">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
-        {/* Buttons */}
-        <div className="flex gap-4 justify-center">
-          <button
-            onClick={toggleListening}
-            className={`flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-lg transition-all ${
-              isListening
-                ? "bg-red-600 text-white animate-pulse"
-                : "bg-white text-black"
-            }`}
-          >
-            {isListening ? (
-              <>
-                <Square className="w-5 h-5" />
-                STOP
-              </>
-            ) : (
-              <>
-                <Mic className="w-5 h-5" />
-                SPEAK
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={clear}
-            className="px-6 py-4 bg-gray-800 hover:bg-gray-700 text-white rounded-xl font-semibold transition-all"
-          >
-            CLEAR
-          </button>
-        </div>
+        {/* Button */}
+        <button
+          onClick={toggleListening}
+          className={`flex items-center gap-3 px-10 py-5 rounded-2xl font-semibold text-xl transition-all ${
+            isListening
+              ? "bg-red-600 text-white"
+              : "bg-white text-black"
+          }`}
+        >
+          {isListening ? (
+            <>
+              <Square className="w-6 h-6" />
+              STOP
+            </>
+          ) : (
+            <>
+              <Mic className="w-6 h-6" />
+              SPEAK
+            </>
+          )}
+        </button>
 
         {/* Status */}
-        <div className="text-center mt-8">
-          <span className="text-gray-600 text-sm">
-            {isListening ? "● Listening..." : "○ Ready"}
-          </span>
-        </div>
+        <p className="text-gray-600 text-sm">
+          {isListening ? "Listening..." : "Ready"}
+        </p>
       </div>
     </div>
   );
